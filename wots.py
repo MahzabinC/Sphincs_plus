@@ -1,7 +1,8 @@
 import hashlib
 import os
 import math
-
+from address import *
+from meow import *
 m = 8  # Message length in bits
 w = 4  # Winternitz parameter
 l1 = math.ceil(m / math.log2(w))  # Number of hash chains
@@ -14,6 +15,7 @@ HASH_FUNC = hashlib.sha256
 
 def hash_function(data):
     return HASH_FUNC(data).digest()
+
 
 # For extra layer of security
 def xor_byte(a, b):
@@ -37,6 +39,11 @@ def wots_key_generate():
 
 # Convert integer to base-w representation
 def to_base_w(message, length):
+    if isinstance(message, str):
+        message = int(message, 16)  # Convert hex string to integer
+    elif isinstance(message, bytes):
+        message = int.from_bytes(message, "big")  # Convert bytes to integer
+
     digits = []
     for _ in range(length):
         digits.append(message % w)
@@ -46,7 +53,66 @@ def to_base_w(message, length):
 # Compute checksum
 def compute_checksum(message_segments):
     csum = sum((w - 1 - xi) for xi in message_segments)
-    return to_base_w(csum, l2)
+    csum &= 0xfff  # truncate to 12 bits
+    return csum
+
+# getting full message in hex
+def wots_fm(msghex):
+    msg = [int(x, 16) for x in msghex]
+    # print(msg)
+    # Compute csum
+    csum = compute_checksum(msg)
+    msg.append((csum >> 8) & 0xF)
+    msg.append((csum >> 4) & 0xF)
+    msg.append((csum >> 0) & 0xF)
+    return msg
+
+
+# For sphincs+
+def compute_ht_sig(sk_seed,pk_seed,tree_addr,leaf_index,SPX_WOTS_LEN,l,m):
+    # Set up ADRS object
+    adrs = Adrs(Adrs.WOTS_HASH, layer=l)
+    adrs.setTreeAddress(tree_addr)
+    adrs.setKeyPairAddress(leaf_index)
+    print(f"ADRS base={adrs.toHex()}")
+
+    ht_sigs = []
+    for idx in range(SPX_WOTS_LEN):  # 35
+        print(f"Generate WOTS+ private key for i = {idx}")
+        adrs.setChainAddress(idx)
+        adrs_c = adrs.toHex()
+        print(f"ADRS={adrs_c}")
+        sk = sha256(sk_seed + adrs_c)[:32]
+        print(f"sk={sk}")
+
+        # Compute F^m_i(sk)
+        mi = m[idx]
+        print(f"m[{idx}]={mi}")
+        x = sk
+        adrs_ht = Adrs.fromHex(adrs.toHex())
+        for i in range(mi):
+            adrs_ht.setHashAddress(i)
+            adrs_c = adrs_ht.toHex()
+            print(f"i={i} ADRS={adrs_c}")
+            print(f"in={x}")
+            x = sha256(BlockPad(pk_seed) + adrs_c + x)[:32]
+            print(f"F(PK.seed, ADRS, in)={x}")
+
+        print(f"ht_sig:{x}")
+        ht_sigs.append(x)
+    return ht_sigs
+
+def chain(X, i, s, pk_seed, adrs_hex, showdebug=False):
+    """chain unrolled"""
+    # adrs is in hex, get object
+    o = Adrs.fromHex(adrs_hex)
+    for hashaddr in range(i, s):
+        #print(f"hashaddr={hashaddr}")
+        adrs_hex = o.setHashAddress(hashaddr).toHex()
+        if showdebug: print(f"adrs={adrs_hex}")
+        X = sha256(BlockPad(pk_seed)+adrs_hex+X)[:32]
+        if showdebug: print(f"F({hashaddr})=", X)
+    return X
 
 # Signing a message
 def wots_sign(message, private_key, randomization_element):
@@ -79,7 +145,7 @@ def wots_verify(message, signature, randomization_element, public_key, pk_hash):
     return computed_pk_hash == pk_hash
 
 # Example Usage
-private_key, r, public_key, pk_hash = wots_key_generate()
-message = 42  # Example message
-signature = wots_sign(message, private_key, r)
-print("WOTS+ Signature Verified:", wots_verify(message, signature, r, public_key, pk_hash))
+# private_key, r, public_key, pk_hash = wots_key_generate()
+# message = 42  # Example message
+# signature = wots_sign(message, private_key, r)
+# print("WOTS+ Signature Verified:", wots_verify(message, signature, r, public_key, pk_hash))
