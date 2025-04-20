@@ -1,30 +1,3 @@
-"""SPHINCS+ ADRS Class."""
-
-"""Usage:
-    from address import Adrs
-    adrs = Adrs()
-    adrs.setType(adrs.WOTS_HASH)
-    print("adrs =", adrs.toHex())
-    adrs = Adrs.fromHex("1528daecdc86eb87610300000002000000020000000d")
-
-Format:
-layer   treeaddr  type    word1    word2    word3
-[1]          [8]   [1]      [4]      [4]      [4]
-00 28daecdc86eb8761 03 00000006 00000000 0000001b
-0  1                9  10       14       18  # byte offsets
-0  2                18 20       28       36  # hex offsets
-
---------------------------------------------------------------------------
-Type                    word1        word2      word3       Type constant      
--------------------------------------------------------------------------                 
-0 WOTS+ hash addr       keypairaddr  chainaddr  hashaddr    WOTS_HASH
-1 WOTS+ pub key compr   keypairaddr  0          0           WOTS_PK
-2 Hash tree addr        0            tree ht    tree index  TREE
-3 FORS tree addr        keypairaddr  tree ht    tree index  FORS_TREE  
-4 FORS tree roots compr keypairaddr  0          0           FORS_ROOTS
-"""
-
-
 class Adrs:
     """Class for ADRS using 22-byte SHA-256 compressed address."""
 

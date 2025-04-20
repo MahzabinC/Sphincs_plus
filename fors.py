@@ -45,53 +45,15 @@ def compute_fors_sig_sk(sk_seed, tree_addr,leaf_index,indices,t, fors_tree) :
     for i in range(fors_tree):
         treeindex = i * t + indices[i]
         adrs.setTreeIndex(treeindex)
-        print(f"ADRS={adrs.toHex()}")
+        #print(f"ADRS={adrs.toHex()}")
         sk = sha256(sk_seed + adrs.toHex())[:32]
-        print(f"fors_sig_sk[{i}]={sk}")
+        #print(f"fors_sig_sk[{i}]={sk}")
         fors_sig_sk.append(sk)
     return fors_sig_sk
 
-def hash_pairwise(hashes, adrs, pk_seed, startidx=0, showdebug=False):
-
-    n = len(hashes) // 2
-    out = ['' for x in range(n)]
-    for i in range(n):
-        adrs.setTreeIndex(startidx + i)
-        if showdebug: print(f"ADRS={adrs.toHex()}")
-        h = sha256(BlockPad(pk_seed) + adrs.toHex() + hashes[2 * i] + hashes[2 * i + 1])[:32]
-        out[i] = h
-    return out
-
-def hash_root(hashes, adrs, pk_seed, startidx=0, showdebug=False):
-
-    # Leaves are at tree height 0
-    treeht = 0
-    while len(hashes) > 1:
-        treeht += 1
-        adrs.setTreeHeight(treeht)
-        startidx //= 2
-        hashes = hash_pairwise(hashes, adrs, pk_seed, startidx, showdebug)
-        if showdebug: print(hashes)
-    return hashes[0]
-
-def authpath(leaves, adrs, pk_seed, leaf_idx, startidx=0, showdebug=False):
-
-    auth = []
-    treeht = 0
-    i = leaf_idx
-    while len(leaves) > 1:
-        # Get hash value we want at current level
-        y = i ^ 1
-        auth.append(leaves[y])
-        treeht += 1
-        i //= 2
-        startidx //= 2
-        adrs.setTreeHeight(treeht)
-        leaves = hash_pairwise(leaves, adrs, pk_seed, startidx, showdebug)
-    return auth
 
 
-def compute_fors_sk_pk(sk_seed: bytes,pk_seed: bytes,tree_addr,leaf_index,fors_trees: int, t: int,indices,sig,fors_sig_sk) :
+def compute_fors_sk_pk(sk_seed,pk_seed,tree_addr,leaf_index,fors_trees: int, t: int,indices,sig,fors_sig_sk) :
     """Computes the FORS secret key """
     # Compute all 33 FORS signature sk values
     roots=[]
@@ -103,26 +65,26 @@ def compute_fors_sk_pk(sk_seed: bytes,pk_seed: bytes,tree_addr,leaf_index,fors_t
         for j in range(t):
             treeindex = i * t + j
             adrs.setTreeIndex(treeindex)
-            print(f"ADRS={adrs.toHex()}")
+            #print(f"ADRS={adrs.toHex()}")
             sk = sha256(sk_seed + adrs.toHex())[:32]
-            print(f"fors_sk[{i}][{j}]={sk}")
+            #print(f"fors_sk[{i}][{j}]={sk}")
             pk = sha256(BlockPad(pk_seed) + adrs.toHex() + sk)[:32]
-            print(f"fors_pk[{i}][{j}]={pk}")
+            #print(f"fors_pk[{i}][{j}]={pk}")
             leaves.append(pk)
         # Compute the root value for this FORS tree
         adrs = Adrs(Adrs.FORS_TREE, layer=0)
         adrs.setTreeAddress(tree_addr)
         adrs.setKeyPairAddress(leaf_index)
-        print(f"ADRS={adrs.toHex()}")
+        #print(f"ADRS={adrs.toHex()}")
         root = hash_root(leaves, adrs, pk_seed, i * t)
-        print(f"root[{i}]={root}")
+        #print(f"root[{i}]={root}")
         roots.append(root)
         # and the authpath for indices[i]
         idx = indices[i]
-        print(f"i={i} idx={idx}")
+        #print(f"i={i} idx={idx}")
         auth = authpath(leaves, adrs, pk_seed, idx, i * t)
-        print(f"fors_auth_path[{i}]:")
-        [print(a) for a in auth]
+        #print(f"fors_auth_path[{i}]:")
+        #[print(a) for a in auth]
         # Output the sig_sk and authpath to the signature value
         sig += fors_sig_sk[i] + format(f" # fors_sig_sk[{i}]\n")
         sig += auth[0] + format(f" # fors_auth_path[{i}]\n")
@@ -132,12 +94,15 @@ def compute_fors_sk_pk(sk_seed: bytes,pk_seed: bytes,tree_addr,leaf_index,fors_t
 
 # Compute the FORS public key given the roots of the k FORS trees.
 def compute_fors_pk(roots,tree_addr,leaf_index,pk_seed):
-    adrs = Adrs(Adrs.FORS_TREE, layer=0)
+    # print("roots:")
+    # [print(r) for r in roots]
+    adrs = Adrs(Adrs.FORS_ROOTS, layer=0)
     adrs.setTreeAddress(tree_addr)
     adrs.setKeyPairAddress(leaf_index)
-    print(f"ADRS={adrs.toHex()}")
+    # print(f"ADRS={adrs.toHex()}")
+    # print(f"pkseed={pk_seed}")
     fors_pk = sha256(BlockPad(pk_seed) + adrs.toHex() + "".join(roots))[:32]
-    print(f"fors_pk[{leaf_index}]={fors_pk}")
+    # print(f"fors_pk[{leaf_index}]={fors_pk}")
     return fors_pk
 
 

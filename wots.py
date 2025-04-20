@@ -1,10 +1,9 @@
-import hashlib
 import os
 import math
 from address import *
 from meow import *
-m = 8  # Message length in bits
-w = 4  # Winternitz parameter
+m = 128  # Message length in bits
+w = 16  # Winternitz parameter
 l1 = math.ceil(m / math.log2(w))  # Number of hash chains
 l2 = math.floor(math.log2(l1 * (w - 1)) / math.log2(w)) + 1  # Checksum length
 l = l1 + l2  # Total chains
@@ -56,63 +55,50 @@ def compute_checksum(message_segments):
     csum &= 0xfff  # truncate to 12 bits
     return csum
 
-# getting full message in hex
-def wots_fm(msghex):
-    msg = [int(x, 16) for x in msghex]
-    # print(msg)
-    # Compute csum
-    csum = compute_checksum(msg)
-    msg.append((csum >> 8) & 0xF)
-    msg.append((csum >> 4) & 0xF)
-    msg.append((csum >> 0) & 0xF)
-    return msg
+def wots_chain(message_hex,show_csum=False):
+    # Convert message to base-w digits
+    msg_segments = to_base_w(message_hex, l1)
+
+    # Compute checksum
+    csum_value = compute_checksum(msg_segments)
+    if show_csum:
+        print(f"csum={csum_value:03x}")
+
+    # Convert checksum to base-w digits
+    csum_segments = to_base_w(csum_value, l2)
+
+    # Combine base-w message and checksum
+    full_message_segments = msg_segments + csum_segments
+    return full_message_segments
 
 
 # For sphincs+
-def compute_ht_sig(sk_seed,pk_seed,tree_addr,leaf_index,SPX_WOTS_LEN,l,m):
-    # Set up ADRS object
-    adrs = Adrs(Adrs.WOTS_HASH, layer=l)
-    adrs.setTreeAddress(tree_addr)
-    adrs.setKeyPairAddress(leaf_index)
-    print(f"ADRS base={adrs.toHex()}")
-
-    ht_sigs = []
+def compute_ht_sig(sk_seed,pk_seed,SPX_WOTS_LEN,m,adrs,ht_sigs):
     for idx in range(SPX_WOTS_LEN):  # 35
-        print(f"Generate WOTS+ private key for i = {idx}")
+        #print(f"Generate WOTS+ private key for i = {idx}")
         adrs.setChainAddress(idx)
         adrs_c = adrs.toHex()
-        print(f"ADRS={adrs_c}")
+        #print(f"ADRS={adrs_c}")
+        #print(f"skseed={sk_seed}")
         sk = sha256(sk_seed + adrs_c)[:32]
-        print(f"sk={sk}")
+        #print(f"sk={sk}")
 
         # Compute F^m_i(sk)
         mi = m[idx]
-        print(f"m[{idx}]={mi}")
+        #print(f"m[{idx}]={mi}")
         x = sk
         adrs_ht = Adrs.fromHex(adrs.toHex())
         for i in range(mi):
             adrs_ht.setHashAddress(i)
             adrs_c = adrs_ht.toHex()
-            print(f"i={i} ADRS={adrs_c}")
-            print(f"in={x}")
+            #print(f"i={i} ADRS={adrs_c}")
+            #print(f"in={x}")
             x = sha256(BlockPad(pk_seed) + adrs_c + x)[:32]
-            print(f"F(PK.seed, ADRS, in)={x}")
+            #print(f"F(PK.seed, ADRS, in)={x}")
 
-        print(f"ht_sig:{x}")
+        #print(f"ht_sig:{x}")
         ht_sigs.append(x)
-    return ht_sigs
 
-def chain(X, i, s, pk_seed, adrs_hex, showdebug=False):
-    """chain unrolled"""
-    # adrs is in hex, get object
-    o = Adrs.fromHex(adrs_hex)
-    for hashaddr in range(i, s):
-        #print(f"hashaddr={hashaddr}")
-        adrs_hex = o.setHashAddress(hashaddr).toHex()
-        if showdebug: print(f"adrs={adrs_hex}")
-        X = sha256(BlockPad(pk_seed)+adrs_hex+X)[:32]
-        if showdebug: print(f"F({hashaddr})=", X)
-    return X
 
 # Signing a message
 def wots_sign(message, private_key, randomization_element):
